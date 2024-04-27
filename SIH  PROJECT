@@ -1,0 +1,156 @@
+// Arduino IDE
+#include <DHT.h>
+#include <Wire.h>
+#include <Adafruit_BMP085.h>
+#include <ESP8266WiFi.h>
+#include <ThingSpeak.h>
+
+#define DHTPIN D4 
+#define DHTTYPE DHT11
+int SensorPin = A0;
+int dt;
+String Data;
+DHT dht(DHTPIN, DHTTYPE);
+char ssid[] = "Password";
+char password[] = "Passwo4d";
+unsigned long channelID = 2267935;
+const char *apiKey = "Q0937KTQGA1ID6HB";
+
+WiFiClient client;
+
+void setup() {
+  pinMode(D0,OUTPUT);
+  pinMode(D1,OUTPUT);
+  pinMode(D6,OUTPUT);
+  digitalWrite(D0,1);
+  digitalWrite(D1,1);
+  Serial.begin(9600);
+  dht.begin();
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi...");
+  }
+  Serial.println("Connected to WiFi"); 
+  ThingSpeak.begin(client);
+}
+
+void loop() {
+  float temperature = dht.readTemperature(true);
+  int sensorValue = analogRead(SensorPin);
+  int soilMoistPercentage = map(sensorValue,205,700,100,0);
+  //Serial.print("Temperature : ");
+  Serial.print(temperature);
+  Serial.print(",");
+  Serial.print(sensorValue);
+  Serial.print(",");
+  Serial.println(soilMoistPercentage);
+  
+
+
+  ThingSpeak.setField(1, sensorValue);
+  ThingSpeak.setField(2, soilMoistPercentage);
+  ThingSpeak.setField(3, temperature);
+   
+  int response = ThingSpeak.writeFields(channelID, apiKey);
+  if (response == 200) {
+    //Serial.println("Data sent to ThingSpeak successfully.");
+  } else {
+    //Serial.println("Error sending data to ThingSpeak. HTTP error code: " + String(response));
+  }
+
+ while(Serial.available()==0){
+}
+Data=Serial.readStringUntil('\r');
+if(Data == "2"){
+  digitalWrite(D6,HIGH);
+}
+if(Data == "0"){
+     digitalWrite(D0,1);
+     digitalWrite(D1,1);
+     
+
+   }
+   else{
+     digitalWrite(D0,0);
+     digitalWrite(D1,0);
+     dt=Data.toInt();
+     dt = dt*1000;
+     delay(dt);
+     digitalWrite(D0,1);
+     digitalWrite(D1,1);
+   }
+  delay(16000);
+}
+
+
+
+
+
+ // VS Code
+import time
+import serial
+import numpy as np
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+import pandas as pd
+
+arduinoData = serial.Serial('com4',9600)
+time.sleep(1)
+excel_file_path = "D:\Docs\programs\python_for_AI\SIH sMist dataset original.et"
+data=pd.read_excel(excel_file_path)
+data=np.asarray(data)
+X=data[:,0:2]
+Y=data[:,2]
+Y=Y.reshape(40,1)
+r=LinearRegression()
+r=r.fit(X,Y)
+#print(r.coef_)
+#print(r.intercept_)
+predict_Y=r.predict(X)
+    #print(predict_Y)
+    #print('meansquare',mean_squared_error(Y,predict_Y))
+    #print('RMSE',np.sqrt(mean_squared_error(Y,predict_Y)))
+X_new=np.array([350,37])
+    #print(X_new)
+    #print(X_new.shape)
+X_new=X_new.reshape(1,2)
+while True:
+    while (arduinoData.inWaiting()==0):
+        pass
+    dataReceived=arduinoData.readline()
+    dataReceived=str(dataReceived,'utf-8')
+    dataReceived=dataReceived.strip('\r\n')
+    dataReceived = dataReceived.split(",")
+    if len(dataReceived) > 2:
+        
+        temp = dataReceived[0]
+        soilMoistValue = dataReceived[1]
+        soilMoistPercentage = dataReceived[2]
+        if temp == "nan":
+            temp = 80
+        print("Temp = ",temp)
+        print("Soil Moisture Value = ",soilMoistValue)
+        print(soilMoistPercentage)
+
+        X_new=np.array([soilMoistValue,temp])
+    #print(X_new)
+    #print(X_new.shape)
+        X_new=X_new.reshape(1,2)
+    #print(X_new)
+    #print(X_new.shape)
+        new_Y=r.predict(X_new)
+        ml = new_Y[0][0]
+        # print(ml)
+    
+        delay = (ml/1414)*60
+        delay = int(delay)
+        #if delay != 2:
+            #delay = 2
+        print("Delay = ",delay,"sec")
+        delay = str(delay) + '\r'
+        delay = str(delay)
+        arduinoData.write(delay.encode())
+    
+    
+    time.sleep(2)
